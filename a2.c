@@ -106,7 +106,9 @@ int main(int argc, char *argv[])
     double start_time, start_time2, end_time, time_elapsed;
     // parse array size input
     unsigned int ARRAY_SIZE = strtoul(argv[1], NULL, 10);
-
+    void *windowbaseptr;
+    MPI_Aint window_size;
+    MPI_Win window;
     // mpi time yippee
     MPI_Init(&argc, &argv);
 
@@ -116,13 +118,14 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
 
-    int A[ARRAY_SIZE], B[ARRAY_SIZE];
+    int *A, *B;
+    A = malloc(ARRAY_SIZE * sizeof(int));
+    B = malloc(ARRAY_SIZE * sizeof(int));
 
     if (my_rank == 0)
     {
         printf("Executing parallel merge on %d processors\n", num_procs);
     }
-    printf("Processor %d check\n", my_rank);
     if (my_rank == 0)
     {
         // randomly generate arrays then sort them
@@ -139,17 +142,42 @@ int main(int argc, char *argv[])
         printf("Arrays sorted\n");
     }
     start_time2 = MPI_Wtime();
-    printf("Time to generate and sort arrays: %f\n", start_time2-start_time);
+    // if (my_rank == 0)
+    // {
+    //     printf("Time to generate and sort arrays: %f\n", start_time2 - start_time);
+    //     window_size = 2 * ARRAY_SIZE * sizeof(int);
+    //     MPI_Win_allocate_shared(window_size, sizeof(int), MPI_INFO_NULL, MPI_COMM_WORLD, &windowbaseptr, &window);
+    // }
+    // else
+    // {
+    //     int disp_unit;
+    //     MPI_Win_allocate_shared(0, sizeof(int), MPI_INFO_NULL, MPI_COMM_WORLD, &windowbaseptr, &window);
+    //     MPI_Win_shared_query(window, 0, &window_size, &disp_unit, &windowbaseptr);
+    // }
+    // if (my_rank == 0)
+    // {
+    //     windowbaseptr = A;
+    //     int *win_B = windowbaseptr + ARRAY_SIZE;
+    //     win_B = B;
+    // }
+    // MPI_Barrier(MPI_COMM_WORLD);
+    // if (my_rank != 0)
+    // {
+    //     A = windowbaseptr;
+    //     B = windowbaseptr + ARRAY_SIZE;
+    // }
     // root proc sends A and B to all other procs
     MPI_Datatype dt100;
     MPI_Type_contiguous(100, MPI_INT, &dt100);
     MPI_Type_commit(&dt100);
     MPI_Bcast(A, ARRAY_SIZE / 100, dt100, 0, MPI_COMM_WORLD);
     MPI_Bcast(B, ARRAY_SIZE / 100, dt100, 0, MPI_COMM_WORLD);
-    if (my_rank == 0)
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (my_rank == 0) 
     {
-        printf("Successfully broadcast A & B to all processors\n");
+        printf("Time to generate and sort arrays: %f\n", start_time2 - start_time);
     }
+    printf("Proc %d cleared broadcast\n", my_rank);
     // for the time being im doing n/p so that it's an even split between procs.
     // i think if you just change n to logn or something it should work?
     int n = ARRAY_SIZE / num_procs;
@@ -160,7 +188,6 @@ int main(int argc, char *argv[])
     {
         if (my_rank < ARRAY_SIZE % num_procs)
         {
-
             n += 1;
             my_start += my_rank;
         }
@@ -171,9 +198,11 @@ int main(int argc, char *argv[])
     }
     int highest_num_index = n + my_start - 1;
     int my_B_end = binarySearch(B, 0, ARRAY_SIZE - 1, A[highest_num_index]);
+    // this assumes A[highest_num_index] is higher than at least 1 value in B.
+    // if there is a freak occurence of chance where this isn't true, run it again
     my_B_end += 1;
     int my_B_start;
-    printf("Proc %d binary search successful", my_rank);
+    printf("Proc %d binary search successful\n", my_rank);
 
     // proc 0 tells proc 1 what it's B end is, and that will become proc 1's B start. repeat for all procs
     if (my_rank == 0) // root proc (proc 0)
@@ -261,11 +290,22 @@ int main(int argc, char *argv[])
         printf("Time elapsed (including sorting initial array): %f\n", time_elapsed);
         time_elapsed = end_time - start_time2;
         printf("Time elapsed (excluding sorting initial array): %f\n", time_elapsed);
+
+        int error_check = 0;
+        for (int i = 1; i < 2 * ARRAY_SIZE; i++)
+        {
+            if (C[i - 1] > C[i])
+            {
+                error_check += 1;
+            }
+        }
+        printf("Number of errors in final array: %d\n", error_check);
     }
     else
     {
         MPI_Send(sub_C, size, MPI_INT, 0, 0, MPI_COMM_WORLD);
     }
+    MPI_Win_free(&window);
     MPI_Finalize();
     return 0;
 }
