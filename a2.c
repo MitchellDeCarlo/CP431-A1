@@ -71,7 +71,7 @@ int binarySearch(int arr[], int l, int r, int x)
         else
             r = m - 1;
     }
-    //return the number to the left if not found
+    // return the number to the left if not found
     return r;
 }
 // returns true if number is a positive number
@@ -105,7 +105,7 @@ int main(int argc, char *argv[])
     int my_rank, num_procs;
     double start_time, start_time2, end_time, time_elapsed;
     // parse array size input
-    int ARRAY_SIZE = atoi(argv[1]);
+    unsigned int ARRAY_SIZE = strtoul(argv[1], NULL, 10);
 
     // mpi time yippee
     MPI_Init(&argc, &argv);
@@ -139,24 +139,16 @@ int main(int argc, char *argv[])
         printf("Arrays sorted\n");
     }
     start_time2 = MPI_Wtime();
+    printf("Time to generate and sort arrays: %f\n", start_time2-start_time);
     // root proc sends A and B to all other procs
+    MPI_Datatype dt100;
+    MPI_Type_contiguous(100, MPI_INT, &dt100);
+    MPI_Type_commit(&dt100);
+    MPI_Bcast(A, ARRAY_SIZE / 100, dt100, 0, MPI_COMM_WORLD);
+    MPI_Bcast(B, ARRAY_SIZE / 100, dt100, 0, MPI_COMM_WORLD);
     if (my_rank == 0)
     {
-        for (int i = 1; i < num_procs; i++) {
-            printf("Proc 0 sending to %d", i);
-            MPI_Send(A, ARRAY_SIZE, MPI_INT, i, 0, MPI_COMM_WORLD);
-            MPI_Send(B, ARRAY_SIZE, MPI_INT, i, 1, MPI_COMM_WORLD);
-        }
-    }
-    else
-    {
-        MPI_Recv(A, ARRAY_SIZE, MPI_INT, 0, 0, MPI_COMM_WORLD, NULL);
-        MPI_Recv(B, ARRAY_SIZE, MPI_INT, 0, 1, MPI_COMM_WORLD, NULL);
-        printf("Proc %d received A & B\n", my_rank);
-    }
-    if (my_rank == 0)
-    {
-        printf("Successfully broadcast A & B to all processors");
+        printf("Successfully broadcast A & B to all processors\n");
     }
     // for the time being im doing n/p so that it's an even split between procs.
     // i think if you just change n to logn or something it should work?
@@ -168,7 +160,7 @@ int main(int argc, char *argv[])
     {
         if (my_rank < ARRAY_SIZE % num_procs)
         {
-            
+
             n += 1;
             my_start += my_rank;
         }
